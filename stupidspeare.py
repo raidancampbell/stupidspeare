@@ -46,25 +46,21 @@ class TestBot(irc.bot.SingleServerIRCBot):
         return
 
     def do_command(self, e, cmd):
-        nick = e.source.nick
         c = self.connection
 
         if cmd == "leave":
             self.disconnect()
         elif cmd == "die":
             self.die()
-        elif cmd == "stats":
-            for chname, chobj in self.channels.items():
-                c.notice(nick, "--- Channel statistics ---")
-                c.notice(nick, "Channel: " + chname)
-                users = sorted(chobj.users())
-                c.notice(nick, "Users: " + ", ".join(users))
-                opers = sorted(chobj.opers())
-                c.notice(nick, "Opers: " + ", ".join(opers))
-                voiced = sorted(chobj.voiced())
-                c.notice(nick, "Voiced: " + ", ".join(voiced))
+        elif cmd == "ping" or cmd == "!ping":
+            c.notice(e.source.nick, "Pong!")
+        elif cmd == "source" or cmd == "!source":
+            c.notice(e.source.nick, "https://github.com/raidancampbell/stupidspeare")
         elif cmd == "!remind" or cmd == "remind":
             wait_time, reminder_text = self.parse_remind(cmd)
+            kwargs = {'wait_time': wait_time, 'reminder_text': reminder_text, 'reminding_location': c}
+            _thread.start_new_thread(TestBot.wait_then_remind_to, **kwargs)
+            TestBot.wait_then_remind_to(**kwargs)
         else:
             pass  # not understood command
 
@@ -97,8 +93,10 @@ class TestBot(irc.bot.SingleServerIRCBot):
                     reminder_text += word + ' '
         return wait_time, reminder_text.trim()
 
-    def wait_then_remind_to(self, reminder_text, reminding_location):
-        pass
+    @staticmethod
+    def wait_then_remind_to(**kwargs):  # wait_time_seconds, reminder_text, reminding_location):
+        time.sleep(kwargs['wait_time_seconds'])
+        kwargs['reminding_location'].notice(kwargs['reminder_text'])
 
 
 def parse_args():
@@ -118,26 +116,5 @@ if __name__ == '__main__':
     ssl = args.ssl
     nick = args.botnick
     channels = args.channel.split(',')
-    TestBot(channel=channels, nickname=nick, server=server, port=port)
-
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) != 4:
-        print("Usage: testbot <server[:port]> <channel> <nickname>")
-        sys.exit(1)
-
-    s = sys.argv[1].split(":", 1)
-    server = s[0]
-    if len(s) == 2:
-        try:
-            port = int(s[1])
-        except ValueError:
-            print("Error: Erroneous port.")
-            sys.exit(1)
-    else:
-        port = 6667
-    channel = sys.argv[2]
-    nickname = sys.argv[3]
-
-    bot = TestBot(channel, nickname, server, port)
+    bot = TestBot(channel=channels, nickname=nick, server=server, port=port)
     bot.start()
