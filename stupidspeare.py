@@ -13,7 +13,7 @@ import irc.bot
 import irc.strings
 import argparse
 import time
-import _thread
+import threading
 import random
 
 
@@ -56,11 +56,13 @@ class TestBot(irc.bot.SingleServerIRCBot):
             c.notice(e.source.nick, "Pong!")
         elif cmd == "source" or cmd == "!source":
             c.notice(e.source.nick, "https://github.com/raidancampbell/stupidspeare")
-        elif cmd == "!remind" or cmd == "remind":
+        elif cmd.startswith("!remind") or cmd.startswith("remind"):
             wait_time, reminder_text = self.parse_remind(cmd)
-            kwargs = {'wait_time': wait_time, 'reminder_text': reminder_text, 'reminding_location': c}
-            _thread.start_new_thread(TestBot.wait_then_remind_to, **kwargs)
-            TestBot.wait_then_remind_to(**kwargs)
+            kwargs = {'wait_time_s': wait_time, 'reminder_text': reminder_text, 'remind_with': c, 'remind_to': e.target}
+
+            threading.Thread(target=TestBot.wait_then_remind_to, kwargs=kwargs).start()
+            # _thread.start_new_thread(TestBot.wait_then_remind_to, kwargs)
+            # TestBot.wait_then_remind_to(**kwargs)
         else:
             pass  # not understood command
 
@@ -91,12 +93,12 @@ class TestBot(irc.bot.SingleServerIRCBot):
                     finished_parsing = True
                 elif finished_parsing:
                     reminder_text += word + ' '
-        return wait_time, reminder_text.trim()
+        return wait_time, reminder_text.strip()
 
     @staticmethod
-    def wait_then_remind_to(**kwargs):  # wait_time_seconds, reminder_text, reminding_location):
-        time.sleep(kwargs['wait_time_seconds'])
-        kwargs['reminding_location'].notice(kwargs['reminder_text'])
+    def wait_then_remind_to(**kwargs):
+        time.sleep(kwargs['wait_time_s'])
+        kwargs['remind_with'].privmsg(kwargs['remind_to'], kwargs['reminder_text'])
 
 
 def parse_args():
