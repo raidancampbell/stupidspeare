@@ -2,7 +2,11 @@
 
 The known commands are:
 
-    stats -- Prints some channel information.
+    ping -- Pongs the user
+
+    remind -- reminds the user after a given number of seconds/minutes/hours/days
+
+    source -- gives a link to the source code
 
     leave -- Disconnect the bot.  The bot will try to reconnect after 60 seconds.
 
@@ -18,9 +22,9 @@ import random
 
 
 class TestBot(irc.bot.SingleServerIRCBot):
-    def __init__(self, channel, nickname, server, port):
+    def __init__(self, channels_, nickname, server, port):
         irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname)
-        self.channels_ = channels
+        self.channels_ = channels_
 
     # if the nick is already taken, append an underscore
     def on_nicknameinuse(self, c, e):
@@ -48,21 +52,20 @@ class TestBot(irc.bot.SingleServerIRCBot):
     def do_command(self, e, cmd):
         c = self.connection
 
-        if cmd == "leave":
+        if cmd == "leave" or cmd == "!leave":
             self.disconnect()
-        elif cmd == "die":
-            self.die()
+        elif cmd == "die" or cmd == "!die":
+            c.notice(e.source.nick, "function disabled until owner privs are implemented")
+            # self.die()
         elif cmd == "ping" or cmd == "!ping":
             c.notice(e.source.nick, "Pong!")
         elif cmd == "source" or cmd == "!source":
             c.notice(e.source.nick, "https://github.com/raidancampbell/stupidspeare")
-        elif cmd.startswith("!remind") or cmd.startswith("remind"):
+        elif cmd.startswith("remind") or cmd.startswith("!remind"):
             wait_time, reminder_text = self.parse_remind(cmd)
             kwargs = {'wait_time_s': wait_time, 'reminder_text': reminder_text, 'remind_with': c, 'remind_to': e.target}
 
             threading.Thread(target=TestBot.wait_then_remind_to, kwargs=kwargs).start()
-            # _thread.start_new_thread(TestBot.wait_then_remind_to, kwargs)
-            # TestBot.wait_then_remind_to(**kwargs)
         else:
             pass  # not understood command
 
@@ -105,7 +108,6 @@ def parse_args():
     parser = argparse.ArgumentParser(description="runs a stupider version of the late-great swiggityspeare IRC bot")
     parser.add_argument('--server', type=str, help="Server address", required=True)
     parser.add_argument('--port', type=int, help="Server port", required=True)
-    # parser.add_argument('--ssl', help='[Use SSL to connect to server]', action='store_true')
     parser.add_argument('--botnick', type=str, help="Nick to use for bot", required=True)
     parser.add_argument('--channel', type=str, help='Channels to join on connect (#chan1[,#chan2,#chan3])', required=True)
     return parser.parse_args()
@@ -115,8 +117,7 @@ if __name__ == '__main__':
     args = parse_args()
     server = args.server
     port = args.port
-    ssl = args.ssl
     nick = args.botnick
     channels = args.channel.split(',')
-    bot = TestBot(channel=channels, nickname=nick, server=server, port=port)
+    bot = TestBot(channels_=channels, nickname=nick, server=server, port=port)
     bot.start()
