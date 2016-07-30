@@ -105,7 +105,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="runs a stupider version of the late-great swiggityspeare IRC bot")
     parser.add_argument('--server', type=str, help="Server address", required=True)
     parser.add_argument('--port', type=int, help="Server port", required=True)
-    parser.add_argument('--ssl', help='[Use SSL to connect to server]', action='store_true')
+    # parser.add_argument('--ssl', help='[Use SSL to connect to server]', action='store_true')
     parser.add_argument('--botnick', type=str, help="Nick to use for bot", required=True)
     parser.add_argument('--channel', type=str, help='Channels to join on connect (#chan1[,#chan2,#chan3])', required=True)
     return parser.parse_args()
