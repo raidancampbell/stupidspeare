@@ -58,12 +58,12 @@ class TestBot(irc.bot.SingleServerIRCBot):
         if cmd_text == "leave" or cmd_text == "!leave":
             self.disconnect()
         elif cmd_text == "die" or cmd_text == "!die":
-            c.notice(event.source.nick, "function disabled until owner privs are implemented")
+            c.privmsg(event.target, event.source.nick + ': ' + "function disabled until owner privs are implemented")
             # self.die()
         elif cmd_text == "ping" or cmd_text == "!ping":
-            c.notice(event.source.nick, "Pong!")
+            c.privmsg(event.target, event.source.nick + ': ' + "Pong!")
         elif cmd_text == "source" or cmd_text == "!source":
-            c.notice(event.source.nick, "https://github.com/raidancampbell/stupidspeare")
+            c.privmsg(event.target, event.source.nick + ': ' + "https://github.com/raidancampbell/stupidspeare")
         elif cmd_text.startswith("remind") or cmd_text.startswith("!remind"):
             wait_time, reminder_text = self.parse_remind(cmd_text)
             kwargs = {'wait_time_s': wait_time, 'reminder_text': reminder_text, 'connection': c,
