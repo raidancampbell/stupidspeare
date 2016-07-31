@@ -70,6 +70,9 @@ class TestBot(irc.bot.SingleServerIRCBot):
                       'channel': event.target, 'nick': event.source.nick}
             if reminder_text:
                 threading.Thread(target=TestBot.wait_then_remind_to, kwargs=kwargs).start()
+            else:
+                c.privmsg(event.target, event.source.nick + ': ' +
+                          'Usage is "!remind [in] 5 (second[s]/minute[s]/hour[s]/day[s]) reminder text"')
         else:
             pass  # not understood command
 
