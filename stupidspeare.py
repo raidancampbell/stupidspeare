@@ -37,6 +37,7 @@ class TestBot(irc.bot.SingleServerIRCBot):
             c.join(chan)
 
     def on_privmsg(self, c, e):
+        print('PRIVMSG: ' + e.arguments[0])
         self.do_command(e, e.arguments[0])
 
     def on_pubmsg(self, c, e):
@@ -49,25 +50,26 @@ class TestBot(irc.bot.SingleServerIRCBot):
             self.do_command(e, e.arguments[0].strip())
         if not all(ord(c) < 128 for c in e.arguments[0]):
             c.privmsg(e.target, 'hisss')
-        return
+        print('PUBMSG: ' + e.arguments[0])
 
-    def do_command(self, e, cmd):
+    def do_command(self, event, cmd_text):
         c = self.connection
 
-        if cmd == "leave" or cmd == "!leave":
+        if cmd_text == "leave" or cmd_text == "!leave":
             self.disconnect()
-        elif cmd == "die" or cmd == "!die":
-            c.notice(e.source.nick, "function disabled until owner privs are implemented")
+        elif cmd_text == "die" or cmd_text == "!die":
+            c.notice(event.source.nick, "function disabled until owner privs are implemented")
             # self.die()
-        elif cmd == "ping" or cmd == "!ping":
-            c.notice(e.source.nick, "Pong!")
-        elif cmd == "source" or cmd == "!source":
-            c.notice(e.source.nick, "https://github.com/raidancampbell/stupidspeare")
-        elif cmd.startswith("remind") or cmd.startswith("!remind"):
-            wait_time, reminder_text = self.parse_remind(cmd)
-            kwargs = {'wait_time_s': wait_time, 'reminder_text': reminder_text, 'remind_with': c, 'remind_to': e.target}
-
-            threading.Thread(target=TestBot.wait_then_remind_to, kwargs=kwargs).start()
+        elif cmd_text == "ping" or cmd_text == "!ping":
+            c.notice(event.source.nick, "Pong!")
+        elif cmd_text == "source" or cmd_text == "!source":
+            c.notice(event.source.nick, "https://github.com/raidancampbell/stupidspeare")
+        elif cmd_text.startswith("remind") or cmd_text.startswith("!remind"):
+            wait_time, reminder_text = self.parse_remind(cmd_text)
+            kwargs = {'wait_time_s': wait_time, 'reminder_text': reminder_text, 'connection': c,
+                      'channel': event.target, 'nick': event.source.nick}
+            if reminder_text:
+                threading.Thread(target=TestBot.wait_then_remind_to, kwargs=kwargs).start()
         else:
             pass  # not understood command
 
@@ -80,18 +82,18 @@ class TestBot(irc.bot.SingleServerIRCBot):
         reminder_text = ''
         if text.lower().startswith('!remind random'):
             wait_time = random.randint(1, 1000) * 60
-            reminder_text = text[text.indexOf('!remind random'):].trim()
+            reminder_text = text[text.index('!remind random') + len('!remind random'):]
         else:
             for word in text.split(' '):
                 if word.isnumeric():  # warning: this can pass through '1.2', which will throw an error on int('1.2')
-                    try:
+                    try:  # grab the time
                         wait_time = int(word)
                     except ValueError:  # so we catch that if it happens, and round it back into being reasonable
                         wait_time = int(round(float(word)))
-                elif wait_time and not finished_parsing:
-                    if word.lower() == 'min' or word.lower() == 'mins' or word.lower() == 'minute' or word.lower == 'minutes':
+                elif wait_time and not finished_parsing:  # we grabbed the time, but need the units
+                    if word.lower() == 'min' or word.lower() == 'mins' or word.lower() == 'minute' or word.lower() == 'minutes':
                         wait_time *= 60
-                    elif word.lower() == 'hr' or word.lower() == 'hrs' or word.lower() == 'hours' or word.lower == 'hour':
+                    elif word.lower() == 'hr' or word.lower() == 'hrs' or word.lower() == 'hours' or word.lower() == 'hour':
                         wait_time *= 60 * 60
                     elif word.lower() == 'day' or word.lower() == 'days':
                         wait_time = wait_time * 24 * 60 * 60
@@ -102,8 +104,10 @@ class TestBot(irc.bot.SingleServerIRCBot):
 
     @staticmethod
     def wait_then_remind_to(**kwargs):
+        print('>>reminding about ' + kwargs['reminder_text'] + ' in  ' + str(kwargs['wait_time_s']//60) + ' minutes')
+        kwargs['connection'].privmsg(kwargs['channel'], "Okay, I'll remind you about " + kwargs['reminder_text'])
         time.sleep(kwargs['wait_time_s'])
-        kwargs['remind_with'].privmsg(kwargs['remind_to'], kwargs['reminder_text'])
+        kwargs['connection'].privmsg(kwargs['channel'], kwargs['nick'] + ': ' + kwargs['reminder_text'])
 
 
 def parse_args():
