@@ -83,9 +83,10 @@ class TestBot(irc.bot.SingleServerIRCBot):
         wait_time = 0
         finished_parsing = False
         reminder_text = ''
-        if text.lower().startswith('!remind random'):
+        text = text[1:] if text.startswith('!') else text
+        if text.lower().startswith('remind random'):
             wait_time = random.randint(1, 1000) * 60
-            reminder_text = text[text.index('!remind random') + len('!remind random'):]
+            reminder_text = text[text.index('remind random') + len('remind random'):]
         else:
             for word in text.split(' '):
                 if word.isnumeric():  # warning: this can pass through '1.2', which will throw an error on int('1.2')
@@ -107,7 +108,7 @@ class TestBot(irc.bot.SingleServerIRCBot):
 
     @staticmethod
     def wait_then_remind_to(**kwargs):
-        print('>>reminding about ' + kwargs['reminder_text'] + ' in  ' + str(kwargs['wait_time_s']//60) + ' minutes')
+        print('>>reminding about ' + kwargs['reminder_text'] + ' in ' + str(kwargs['wait_time_s']//60) + ' minutes')
         kwargs['connection'].privmsg(kwargs['channel'], "Okay, I'll remind you about " + kwargs['reminder_text'])
         time.sleep(kwargs['wait_time_s'])
         kwargs['connection'].privmsg(kwargs['channel'], kwargs['nick'] + ': ' + kwargs['reminder_text'])
