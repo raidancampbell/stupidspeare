@@ -48,7 +48,7 @@ class TestBot(irc.bot.SingleServerIRCBot):
             self.do_command(e, a[1].strip())
         elif e.arguments[0].startswith('!'):
             self.do_command(e, e.arguments[0].strip())
-        if not all(ord(c) < 128 for c in e.arguments[0]):
+        if not all(ord(c) < 128 for c in e.arguments[0]) or 'moist' in e.arguments[0]:
             c.privmsg(e.target, 'hisss')
         print('PUBMSG: ' + e.arguments[0])
 
