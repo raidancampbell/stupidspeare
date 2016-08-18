@@ -48,6 +48,9 @@ class TestBot(irc.bot.SingleServerIRCBot):
             self.do_command(e, a[1].strip())
         elif e.arguments[0].startswith('!'):
             self.do_command(e, e.arguments[0].strip())
+        #cm1000k is not good at python
+        elif (('buzzfeed.com' in e.arguments[0]) or ('huffingtonpost.com' in e.arguments[0])):
+            c.privmsg(e.target, 'hiss fuck off with your huffpost buzzfeed crap')
         if not all(ord(c) < 128 for c in e.arguments[0]) or 'moist' in e.arguments[0]:
             c.privmsg(e.target, 'hisss')
         print('PUBMSG: ' + e.arguments[0])
