@@ -25,22 +25,28 @@ class TestBot(irc.bot.SingleServerIRCBot):
     def __init__(self, channels_, nickname, server, port):
         irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname)
         self.channels_ = channels_
+        self.connection.add_global_handler('invite', self.on_invite)
+
+    @staticmethod
+    def on_invite(connection, event):
+        connection.join(event.arguments[0])
 
     # if the nick is already taken, append an underscore
-    def on_nicknameinuse(self, c, e):
-        c.nick(c.get_nickname() + "_")
+    @staticmethod
+    def on_nicknameinuse(connection, event):
+        connection.nick(connection.get_nickname() + "_")
 
     # whenever we're finished connecting to the server
-    def on_welcome(self, c, e):
+    def on_welcome(self, connection, event):
         # connect to all the channels we want to
         for chan in self.channels_:
-            c.join(chan)
+            connection.join(chan)
 
-    def on_privmsg(self, c, e):
-        print('PRIVMSG: ' + e.arguments[0])
-        self.do_command(e, e.arguments[0])
+    def on_privmsg(self, connection, event):
+        print('PRIVMSG: ' + event.arguments[0])
+        self.do_command(event, event.arguments[0])
 
-    def on_pubmsg(self, c, e):
+    def on_pubmsg(self, connection, e):
         a = e.arguments[0].split(":", 1)
         # if someone sent a line saying "mynick: command"
         if len(a) > 1 and irc.strings.lower(a[0]) == irc.strings.lower(self.connection.get_nickname()):
@@ -48,33 +54,33 @@ class TestBot(irc.bot.SingleServerIRCBot):
             self.do_command(e, a[1].strip())
         elif e.arguments[0].startswith('!'):
             self.do_command(e, e.arguments[0].strip())
-        #cm1000k is not good at python
-        elif (('buzzfeed.com' in e.arguments[0]) or ('huffingtonpost.com' in e.arguments[0])):
-            c.privmsg(e.target, 'hiss fuck off with your huffpost buzzfeed crap')
+        # CM1000K is not good at python
+        elif 'buzzfeed.com' in e.arguments[0] or 'huffingtonpost.com' in e.arguments[0]:
+            connection.privmsg(e.target, 'hisss fuck off with your huffpost buzzfeed crap')
         if not all(ord(c) < 128 for c in e.arguments[0]) or 'moist' in e.arguments[0]:
-            c.privmsg(e.target, 'hisss')
+            connection.privmsg(e.target, 'hisss')
         print('PUBMSG: ' + e.arguments[0])
 
     def do_command(self, event, cmd_text):
-        c = self.connection
+        connection = self.connection
 
         if cmd_text == "leave" or cmd_text == "!leave":
             self.disconnect()
         elif cmd_text == "die" or cmd_text == "!die":
-            c.privmsg(event.target, event.source.nick + ': ' + "function disabled until owner privs are implemented")
+            connection.privmsg(event.target, event.source.nick + ': ' + "function disabled until owner privs are implemented")
             # self.die()
         elif cmd_text == "ping" or cmd_text == "!ping":
-            c.privmsg(event.target, event.source.nick + ': ' + "Pong!")
+            connection.privmsg(event.target, event.source.nick + ': ' + "Pong!")
         elif cmd_text == "source" or cmd_text == "!source":
-            c.privmsg(event.target, event.source.nick + ': ' + "https://github.com/raidancampbell/stupidspeare")
+            connection.privmsg(event.target, event.source.nick + ': ' + "https://github.com/raidancampbell/stupidspeare")
         elif cmd_text.startswith("remind") or cmd_text.startswith("!remind"):
             wait_time, reminder_text = self.parse_remind(cmd_text)
-            kwargs = {'wait_time_s': wait_time, 'reminder_text': reminder_text, 'connection': c,
+            kwargs = {'wait_time_s': wait_time, 'reminder_text': reminder_text, 'connection': connection,
                       'channel': event.target, 'nick': event.source.nick}
             if reminder_text:
                 threading.Thread(target=TestBot.wait_then_remind_to, kwargs=kwargs).start()
             else:
-                c.privmsg(event.target, event.source.nick + ': ' +
+                connection.privmsg(event.target, event.source.nick + ': ' +
                           'Usage is "!remind [in] 5 (second[s]/minute[s]/hour[s]/day[s]) reminder text"')
         else:
             pass  # not understood command
@@ -128,9 +134,9 @@ def parse_args():
 # Execution begins here, if called via python interpreter
 if __name__ == '__main__':
     args = parse_args()
-    server = args.server
-    port = args.port
+    server_ = args.server
+    port_ = args.port
     nick = args.botnick
     channels = args.channel.split(',')
-    bot = TestBot(channels_=channels, nickname=nick, server=server, port=port)
+    bot = TestBot(channels_=channels, nickname=nick, server=server_, port=port_)
     bot.start()
