@@ -66,7 +66,7 @@ class TestBot(irc.bot.SingleServerIRCBot):
         connection = self.connection
 
         if cmd_text == "leave" or cmd_text == "!leave":
-            self.disconnect()
+            connection.part(event.target)
         elif cmd_text == "die" or cmd_text == "!die":
             connection.privmsg(event.target, event.source.nick + ': ' + "disabled until owner privs are implemented")
             # self.die()
