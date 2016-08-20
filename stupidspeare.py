@@ -15,22 +15,41 @@ The known commands are:
 
 import irc.bot
 import irc.strings
-import argparse
-import time
-import threading
-import random
+import argparse  # parse strings from CLI invocation
+import time  # unix timestamp is `int(time.time())`
+import threading  # for sleeping during the !remind
+import random  # for !remind random
+import json
 
 
-class TestBot(irc.bot.SingleServerIRCBot):
-    def __init__(self, channels, nickname, server, port):
-        irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname)
-        self.channels = channels
+class StupidSpeare(irc.bot.SingleServerIRCBot):
+    def __init__(self, json_filename):
+        self.json_filename = json_filename
+        with open(json_filename, 'r') as infile:
+            self.json_data = json.loads(infile.read())
+        irc.bot.SingleServerIRCBot.__init__(self, [(self.json_data['serveraddress'], self.json_data['serverport'])],
+                                            self.json_data['botnick'], self.json_data['botrealname'])
+        self.channels_ = self.json_data['channels']
         self.connection.add_global_handler('invite', self.on_invite)
 
+    def reinstate_reminders(self, reminder_array):
+        for reminder_object in reminder_array:
+            reminder_object_non_serializable = reminder_object
+            reminder_object_non_serializable['connection'] = self.connection
+            reminder_object_non_serializable['self'] = self
+            threading.Thread(target=StupidSpeare.wait_then_remind_to, kwargs=reminder_object_non_serializable).start()
+
     # when the bot is invited to a channel, respond by joining the channel
-    @staticmethod
-    def on_invite(connection, event):
-        connection.join(event.arguments[0])
+    def on_invite(self, connection, event):
+        channel_to_join = event.arguments[0]
+        connection.join(channel_to_join)
+        if channel_to_join not in self.json_data['channels']:
+            self.json_data['channels'].append(channel_to_join)
+            self.save_json()
+
+    def save_json(self):
+        with open(self.json_filename, 'w') as outfile:
+            json.dump(self.json_data, outfile, indent=2)
 
     # if the nick is already taken, append an underscore
     @staticmethod
@@ -40,8 +59,10 @@ class TestBot(irc.bot.SingleServerIRCBot):
     # whenever we're finished connecting to the server, join the channels
     def on_welcome(self, connection, event):
         # connect to all the channels we want to
-        for chan in self.channels:
+        for chan in self.channels_:
             connection.join(chan)
+        time.sleep(1)
+        self.reinstate_reminders(self.json_data['reminders'])
 
     # log private messages to stdout, and try to parse a command from it
     def on_privmsg(self, connection, event):
@@ -71,21 +92,33 @@ class TestBot(irc.bot.SingleServerIRCBot):
         connection = self.connection
 
         if cmd_text == "leave" or cmd_text == "!leave":  # respond to !leave
+            if event.target in self.json_data['channels']:
+                self.json_data['channels'].remove(event.target)
+                self.save_json()
             connection.part(event.target)
         elif cmd_text == "die" or cmd_text == "!die":  # respond to !die
-            connection.privmsg(event.target, event.source.nick + ': ' + "disabled until owner privs are implemented")
-            # self.die()
+            if event.source.nick == self.json_data['botownernick']:
+                self.die()
+            else:
+                connection.privmsg(event.target,
+                                   event.source.nick + ": you're not " + self.json_data['botownernick'] + '!')
         elif cmd_text == "ping" or cmd_text == "!ping":  # respond to !ping
             connection.privmsg(event.target, event.source.nick + ': ' + "Pong!")
         elif cmd_text == "source" or cmd_text == "!source":  # respond to !source
             connection.privmsg(event.target,
                                event.source.nick + ': ' + "https://github.com/raidancampbell/stupidspeare")
-        elif cmd_text.startswith("remind") or cmd_text.startswith("!remind"): # respond to !remind
+        elif cmd_text.startswith("remind") or cmd_text.startswith("!remind"):  # respond to !remind
             wait_time, reminder_text = self.parse_remind(cmd_text)
-            kwargs = {'wait_time_s': wait_time, 'reminder_text': reminder_text, 'connection': connection,
-                      'channel': event.target, 'nick': event.source.nick}
             if reminder_text:
-                threading.Thread(target=TestBot.wait_then_remind_to, kwargs=kwargs).start()
+                reminder_object = {'channel': event.target, 'remindertext': event.source.nick + ': ' + reminder_text,
+                                   'remindertime': int(time.time()) + wait_time}
+                self.json_data['reminders'].append(reminder_object)
+                self.save_json()
+                reminder_object_non_serializable = reminder_object
+                reminder_object_non_serializable['connection'] = connection  # add the connection object
+                reminder_object_non_serializable['self'] = self
+                threading.Thread(target=StupidSpeare.wait_then_remind_to,
+                                 kwargs=reminder_object_non_serializable).start()
             else:
                 connection.privmsg(event.target, event.source.nick + ': ' +
                                    'Usage is "!remind [in] 5 (second[s]/minute[s]/hour[s]/day[s]) reminder text"')
@@ -125,33 +158,36 @@ class TestBot(irc.bot.SingleServerIRCBot):
         return int(round(wait_time)), reminder_text.strip()  # round the time back from a float into an int
 
     # waits the given time, then will issue a reminder on the given channel to the given nick with the given text
-    # kwargs should contain: 'connection', 'channel', 'wait_time_s', 'nick' and 'reminder_text'
+    # kwargs should contain: 'connection', 'channel', 'remindertime', and 'reminder_text'
     # this function is meant to be forked off into a separate thread: it will sleep until it's ready to respond
-    @staticmethod
     def wait_then_remind_to(**kwargs):
-        print('>>reminding about ' + kwargs['reminder_text'] + ' in ' + str(kwargs['wait_time_s'] // 60) + ' minutes')
-        kwargs['connection'].privmsg(kwargs['channel'], "Okay, I'll remind you about " + kwargs['reminder_text'])
-        time.sleep(kwargs['wait_time_s'])
-        kwargs['connection'].privmsg(kwargs['channel'], kwargs['nick'] + ': ' + kwargs['reminder_text'])
+        # how many seconds away are we from the targeted reminding time
+        wait_time_s = kwargs['remindertime'] - int(time.time())
+        if wait_time_s > 0:  # if we still have time, then log it and let them know
+            print('>> sending "' + kwargs['remindertext'] + '" in ' + str(wait_time_s // 60) + ' minutes')
+            kwargs['connection'].privmsg(kwargs['channel'], "Okay, I'll remind you about " + kwargs['remindertext'])
+        else:  # if we don't, then log it and let them know
+            print('>> was supposed to send "' + kwargs['remindertext'] + '" ' + str(wait_time_s // 60) + ' minutes ago')
+            kwargs['connection'].privmsg(kwargs['channel'], 'I missed a reminder while offline!')
+        if wait_time_s > 0:
+            time.sleep(wait_time_s)
+        kwargs['connection'].privmsg(kwargs['channel'], kwargs['remindertext'])
+        kwargs['self'].json_data['reminders'] = list(
+            filter(lambda x: x['remindertime'] != kwargs['remindertime'], kwargs['self'].json_data['reminders']))
+        kwargs['self'].save_json()
 
 
 # parse args from command line invocation
 def parse_args():
     parser = argparse.ArgumentParser(description="runs a stupider version of the late-great swiggityspeare IRC bot")
-    parser.add_argument('--server', type=str, help="Server address", required=True)
-    parser.add_argument('--port', type=int, help="Server port", required=True)
-    parser.add_argument('--botnick', type=str, help="Nick to use for bot", required=True)
-    parser.add_argument('--channel', type=str, help='Channels to join on connect (#chan1[,#chan2,#chan3])',
-                        required=True)
+    parser.add_argument('--json_filename', type=str, help="Filename of the json configuration file [stupidspeare.json]",
+                        required=False)
     return parser.parse_args()
 
 
 # Execution begins here, if called via command line
 if __name__ == '__main__':
     args = parse_args()
-    server_ = args.server
-    port_ = args.port
-    nickname_ = args.botnick
-    channels_ = args.channel.split(',')
-    bot = TestBot(channels=channels_, nickname=nickname_, server=server_, port=port_)
+    json_filename_ = args.json_filename or 'stupidspeare.json'
+    bot = StupidSpeare(json_filename=json_filename_)
     bot.start()
