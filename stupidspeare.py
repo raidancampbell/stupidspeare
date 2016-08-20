@@ -34,7 +34,7 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
 
     def reinstate_reminders(self, reminder_array):
         for reminder_object in reminder_array:
-            reminder_object_non_serializable = reminder_object
+            reminder_object_non_serializable = reminder_object.copy()
             reminder_object_non_serializable['connection'] = self.connection
             reminder_object_non_serializable['self'] = self
             threading.Thread(target=StupidSpeare.wait_then_remind_to, kwargs=reminder_object_non_serializable).start()
@@ -114,7 +114,7 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
                                    'remindertime': int(time.time()) + wait_time}
                 self.json_data['reminders'].append(reminder_object)
                 self.save_json()
-                reminder_object_non_serializable = reminder_object
+                reminder_object_non_serializable = reminder_object.copy()
                 reminder_object_non_serializable['connection'] = connection  # add the connection object
                 reminder_object_non_serializable['self'] = self
                 threading.Thread(target=StupidSpeare.wait_then_remind_to,
