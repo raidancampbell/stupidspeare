@@ -8,5 +8,8 @@
     "#lounge",
     "#swag"
   ],
-  "serverport": 6667
+  "serverport": 6667,
+  "whitelistnicks": [
+    "lulu"
+  ]
 }

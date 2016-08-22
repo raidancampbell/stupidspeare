@@ -30,6 +30,12 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
         irc.bot.SingleServerIRCBot.__init__(self, [(self.json_data['serveraddress'], self.json_data['serverport'])],
                                             self.json_data['botnick'], self.json_data['botrealname'])
         self.channels_ = self.json_data['channels']
+        try:
+            self.hiss_whitelist = self.json_data['whitelistnicks']
+        except KeyError:
+            self.hiss_whitelist = []
+            self.json_data['whitelistnicks'] = []
+            self.save_json()
         self.connection.add_global_handler('invite', self.on_invite)
 
     def reinstate_reminders(self, reminder_array):
@@ -49,7 +55,8 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
 
     def save_json(self):
         with open(self.json_filename, 'w') as outfile:
-            json.dump(self.json_data, outfile, indent=2)
+            # write the json to the file, pretty-printed with indentations, and alphabetically sorted
+            json.dump(self.json_data, outfile, indent=2, sort_keys=True)
 
     # if the nick is already taken, append an underscore
     @staticmethod
@@ -80,11 +87,12 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
             self.do_command(event, a[1].strip())
         elif message_text.startswith('!'):
             self.do_command(event, message_text.strip())
-        # hiss at buzzfeed/huffpost, characters greater than 128, and on the word 'moist'
-        if 'buzzfeed.com' in message_text or 'huffingtonpost.com' in message_text:
-            connection.privmsg(event.target, 'hisss fuck off with your huffpost buzzfeed crap')
-        elif not all(ord(c) < 128 for c in event.arguments[0]) or 'moist' in message_text:
-            connection.privmsg(event.target, 'hisss')
+        if event.source.nick not in self.hiss_whitelist:
+            # hiss at buzzfeed/huffpost, characters greater than 128, and on the word 'moist'
+            if 'buzzfeed.com' in message_text or 'huffingtonpost.com' in message_text:
+                connection.privmsg(event.target, 'hisss fuck off with your huffpost buzzfeed crap')
+            elif not all(ord(c) < 128 for c in event.arguments[0]) or 'moist' in message_text:
+                connection.privmsg(event.target, 'hisss')
         print('PUBMSG: ' + event.arguments[0])
 
     # performs the various commands documented at the top of the file
