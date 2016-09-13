@@ -20,6 +20,7 @@ import time  # unix timestamp is `int(time.time())`
 import threading  # for sleeping during the !remind
 import random  # for !remind random
 import json
+from jaraco.stream import buffer
 
 
 class StupidSpeare(irc.bot.SingleServerIRCBot):
@@ -29,6 +30,7 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
             self.json_data = json.loads(infile.read())
         irc.bot.SingleServerIRCBot.__init__(self, [(self.json_data['serveraddress'], self.json_data['serverport'])],
                                             self.json_data['botnick'], self.json_data['botrealname'])
+        self.connection.buffer_class = buffer.LenientDecodingLineBuffer
         self.channels_ = self.json_data['channels']
         try:
             self.hiss_whitelist = self.json_data['whitelistnicks']
@@ -147,7 +149,7 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
             reminder_text = text[text.index('remind random') + len('remind random'):]
         else:
             for word in text.split(' '):
-                if word.isnumeric():  # we parse it into a float now, and round it at the end
+                if word.isnumeric() and not wait_time:  # we parse it into a float now, and round it at the end
                     try:  # grab the time
                         wait_time = float(word)
                     except ValueError:
