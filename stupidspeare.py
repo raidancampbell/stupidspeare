@@ -17,10 +17,37 @@ import irc.bot
 import irc.strings
 import argparse  # parse strings from CLI invocation
 import time  # unix timestamp is `int(time.time())`
-import threading  # for sleeping during the !remind
 import random  # for !remind random
 import json
 from jaraco.stream import buffer
+from threading import Timer
+
+
+# thanks, http://stackoverflow.com/a/13151299/3006365
+class RepeatedTimer(object):
+    def __init__(self, interval, function, *_args, **kwargs):
+        self._timer = None
+        self.function = function
+        self.interval = interval
+        self._args = _args
+        self.kwargs = kwargs
+        self.is_running = False
+        self.start()
+
+    def _run(self):
+        self.is_running = False
+        self.start()
+        self.function(*self._args, **self.kwargs)
+
+    def start(self):
+        if not self.is_running:
+            self._timer = Timer(self.interval, self._run)
+            self._timer.start()
+            self.is_running = True
+
+    def stop(self):
+        self._timer.cancel()
+        self.is_running = False
 
 
 class StupidSpeare(irc.bot.SingleServerIRCBot):
@@ -40,12 +67,20 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
             self.save_json()
         self.connection.add_global_handler('invite', self.on_invite)
 
-    def reinstate_reminders(self, reminder_array):
-        for reminder_object in reminder_array:
+    # rereads the json reminders, then issues them as needed
+    @staticmethod
+    def check_reminders(self):
+        json_filename = self.json_filename
+        with open(json_filename, 'r') as infile:  # read the json
+            self.json_data = json.loads(infile.read())
+        for reminder_object in self.json_data['reminders']:  # check the reminders
+            if reminder_object['remindertime'] > time.time():
+                continue
+            # if a reminder has expired
             reminder_object_non_serializable = reminder_object.copy()
             reminder_object_non_serializable['connection'] = self.connection
             reminder_object_non_serializable['self'] = self
-            threading.Thread(target=StupidSpeare.wait_then_remind_to, kwargs=reminder_object_non_serializable).start()
+            StupidSpeare.issue_reminder(**reminder_object_non_serializable)
 
     # when the bot is invited to a channel, respond by joining the channel
     def on_invite(self, connection, event):
@@ -71,7 +106,8 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
         for chan in self.channels_:
             connection.join(chan)
         time.sleep(1)
-        self.reinstate_reminders(self.json_data['reminders'])
+        time_ = RepeatedTimer(5, StupidSpeare.check_reminders, self)
+        time_.start()
 
     # log private messages to stdout, and try to parse a command from it
     def on_privmsg(self, connection, event):
@@ -109,6 +145,7 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
         elif cmd_text == "die" or cmd_text == "!die":  # respond to !die
             if event.source.nick == self.json_data['botownernick']:
                 self.die()
+                exit(0)
             else:
                 connection.privmsg(event.target,
                                    event.source.nick + ": you're not " + self.json_data['botownernick'] + '!')
@@ -120,15 +157,11 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
         elif cmd_text.startswith("remind") or cmd_text.startswith("!remind"):  # respond to !remind
             wait_time, reminder_text = self.parse_remind(cmd_text)
             if reminder_text:
+                connection.privmsg(event.target, event.source.nick + ': ' + "I'll remind you about " + reminder_text)
                 reminder_object = {'channel': event.target, 'remindertext': event.source.nick + ': ' + reminder_text,
                                    'remindertime': int(time.time()) + wait_time}
                 self.json_data['reminders'].append(reminder_object)
-                self.save_json()
-                reminder_object_non_serializable = reminder_object.copy()
-                reminder_object_non_serializable['connection'] = connection  # add the connection object
-                reminder_object_non_serializable['self'] = self
-                threading.Thread(target=StupidSpeare.wait_then_remind_to,
-                                 kwargs=reminder_object_non_serializable).start()
+                self.save_json()  # write the reminder to the file.  The background thread will pick it up and issue
             else:
                 connection.privmsg(event.target, event.source.nick + ': ' +
                                    'Usage is "!remind [in] 5 (second[s]/minute[s]/hour[s]/day[s]) reminder text"')
@@ -167,21 +200,15 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
                     reminder_text += word + ' '
         return int(round(wait_time)), reminder_text.strip()  # round the time back from a float into an int
 
-    # waits the given time, then will issue a reminder on the given channel to the given nick with the given text
-    # kwargs should contain: 'connection', 'channel', 'remindertime', and 'reminder_text'
-    # this function is meant to be forked off into a separate thread: it will sleep until it's ready to respond
-    def wait_then_remind_to(**kwargs):
-        # how many seconds away are we from the targeted reminding time
-        wait_time_s = kwargs['remindertime'] - int(time.time())
-        if wait_time_s > 0:  # if we still have time, then log it and let them know
-            print('>> sending "' + kwargs['remindertext'] + '" in ' + str(wait_time_s // 60) + ' minutes')
-            kwargs['connection'].privmsg(kwargs['channel'], "Okay, I'll remind you about " + kwargs['remindertext'])
-        else:  # if we don't, then log it and let them know
-            print('>> was supposed to send "' + kwargs['remindertext'] + '" ' + str(wait_time_s // 60) + ' minutes ago')
-            kwargs['connection'].privmsg(kwargs['channel'], 'I missed a reminder while offline!')
-        if wait_time_s > 0:
-            time.sleep(wait_time_s)
+    # issue a reminder on the given channel to the given nick with the given text
+    # kwargs should contain: 'connection', 'channel', and 'reminder_text'
+    @staticmethod
+    def issue_reminder(**kwargs):
         kwargs['connection'].privmsg(kwargs['channel'], kwargs['remindertext'])
+        # after issuing the reminder, remove it from the list of things to remind
+        # there is a theoretical collision if multiple reminders are targeted at the same second,
+        # only one may be issued then all within that second will be deleted.
+        # it is more likely to have a unique remindertime than unique remindertext, so this choice is acceptable
         kwargs['self'].json_data['reminders'] = list(
             filter(lambda x: x['remindertime'] != kwargs['remindertime'], kwargs['self'].json_data['reminders']))
         kwargs['self'].save_json()
