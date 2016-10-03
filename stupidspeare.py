@@ -126,6 +126,7 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
         elif message_text.startswith('!'):
             self.do_command(event, message_text.strip())
         if event.source.nick not in self.hiss_whitelist:
+            message_text = message_text.lower()
             # hiss at buzzfeed/huffpost, characters greater than 128, and on the word 'moist'
             if 'buzzfeed.com' in message_text or 'huffingtonpost.com' in message_text:
                 connection.privmsg(event.target, 'hisss fuck off with your huffpost buzzfeed crap')
