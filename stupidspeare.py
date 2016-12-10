@@ -66,6 +66,7 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
             self.json_data['whitelistnicks'] = []
             self.save_json()
         self.connection.add_global_handler('invite', self.on_invite)
+        self.timer = RepeatedTimer(5, StupidSpeare.check_reminders, self)
 
     # rereads the json reminders, then issues them as needed
     @staticmethod
@@ -106,13 +107,12 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
         for chan in self.channels_:
             connection.join(chan)
         time.sleep(1)
-        time_ = RepeatedTimer(5, StupidSpeare.check_reminders, self)
-        time_.start()
+        self.timer.start()
 
     # log private messages to stdout, and try to parse a command from it
     def on_privmsg(self, connection, event):
         message_text = event.arguments[0]
-        print('PRIVMSG: ' + message_text)
+        print('PRIV: <' + event.source.nick + '> ' + message_text)
         self.do_command(event, message_text)
 
     # log public messages to stdout, hiss on various conditions, and try to parse a command
@@ -132,7 +132,7 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
                 connection.privmsg(event.target, 'hisss fuck off with your huffpost buzzfeed crap')
             elif not all(ord(c) < 128 for c in event.arguments[0]) or 'moist' in message_text:
                 connection.privmsg(event.target, 'hisss')
-        print('PUBMSG: ' + event.arguments[0])
+        print('PUB: <' + event.source.nick + '> ' + event.arguments[0])
 
     # performs the various commands documented at the top of the file
     def do_command(self, event, cmd_text):
@@ -145,6 +145,7 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
             connection.part(event.target)
         elif cmd_text == "die" or cmd_text == "!die":  # respond to !die
             if event.source.nick == self.json_data['botownernick']:
+                self.timer.stop()
                 self.die()
                 exit(0)
             else:
