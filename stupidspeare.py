@@ -19,12 +19,17 @@ import argparse  # parse strings from CLI invocation
 import time  # unix timestamp is `int(time.time())`
 import random  # for !remind random
 import json
+import validators
+import urllib.request
+import ssl
 from jaraco.stream import buffer
 from threading import Timer
+from bs4 import BeautifulSoup
 
 
 # thanks, http://stackoverflow.com/a/13151299/3006365
 class RepeatedTimer(object):
+
     def __init__(self, interval, function, *_args, **kwargs):
         self._timer = None
         self.function = function
@@ -59,6 +64,7 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
                                             self.json_data['botnick'], self.json_data['botrealname'])
         self.connection.buffer_class = buffer.LenientDecodingLineBuffer
         self.channels_ = self.json_data['channels']
+        self.no_ssl = ssl._create_unverified_context()
         try:
             self.hiss_whitelist = self.json_data['whitelistnicks']
         except KeyError:
@@ -118,6 +124,11 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
     # log public messages to stdout, hiss on various conditions, and try to parse a command
     def on_pubmsg(self, connection, event):
         message_text = event.arguments[0]
+        url = self.extract_url(message_text)
+        if url:
+            soup = BeautifulSoup(urllib.request.urlopen(url, context=self.no_ssl), "html.parser")
+            connection.privmsg(event.target, soup.title.string)
+
         a = message_text.split(":", 1)
         # if someone sent a line saying "mynick: command"
         if len(a) > 1 and irc.strings.lower(a[0]) == irc.strings.lower(self.connection.get_nickname()):
@@ -133,6 +144,17 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
             elif not all(ord(c) < 128 for c in event.arguments[0]) or 'moist' in message_text:
                 connection.privmsg(event.target, 'hisss')
         print('PUB: <' + event.source.nick + '> ' + event.arguments[0])
+
+    @staticmethod
+    def extract_url(string):
+        for word in string.split():
+            try:
+                result = validators.url(word)
+                if result:
+                    return word
+            except Exception:
+                pass
+        return False
 
     # performs the various commands documented at the top of the file
     def do_command(self, event, cmd_text):
