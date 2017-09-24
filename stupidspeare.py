@@ -126,8 +126,13 @@ class StupidSpeare(irc.bot.SingleServerIRCBot):
         message_text = event.arguments[0]
         url = self.extract_url(message_text)
         if url:
-            soup = BeautifulSoup(urllib.request.urlopen(url, context=self.no_ssl), "html.parser")
-            connection.privmsg(event.target, soup.title.string)
+            try:
+
+                soup = BeautifulSoup(urllib.request.urlopen(url, context=self.no_ssl), "html.parser")
+                connection.privmsg(event.target, soup.title.string.split('\n')[0])
+            except Exception as e:
+                print(e)
+                connection.privmsg(event.target, '/me derped.')
 
         a = message_text.split(":", 1)
         # if someone sent a line saying "mynick: command"
